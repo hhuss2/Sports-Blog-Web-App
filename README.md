@@ -1,5 +1,4 @@
 # Sports-Blog-Web-App
-This is a web application for a sports blog where users can create, edit, and delete posts. It includes user authentication features like login, logout, and registration.
 
 ## General Info
 
