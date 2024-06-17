@@ -3,27 +3,23 @@ import bcrypt
 from flask import Flask, render_template, url_for, flash, redirect, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, SubmitField
-from wtforms.validators import DataRequired
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-
-from forms import LoginForm, RegistrationForm
+import os
+import secrets
+from forms import LoginForm, RegistrationForm, UpdateAccountForm, PostForm
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['UPLOAD_FOLDER'] = 'static/profile_pics'
+app.config['ALLOWED_EXTENSIONS'] = {'jpg', 'jpeg', 'png'}
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
-
-
-@app.route("/")
-def index():
-    return render_template('home.html')
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -39,24 +35,43 @@ class Post(db.Model):
     content = db.Column(db.Text, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-class PostForm(FlaskForm):
-    title = StringField('Title', validators=[DataRequired()])
-    content = TextAreaField('Content', validators=[DataRequired()])
-    submit = SubmitField('Create Post')
-
-with app.app_context():
-    db.create_all()
-
-login_manager.login_message = 'Please log in to access this page.'
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-@app.route("/home")
+def save_picture(form_picture):
+    random_hex = secrets.token_hex(8)
+    _, f_ext = os.path.splitext(form_picture.filename)
+    picture_fn = random_hex + f_ext
+    picture_path = os.path.join(app.config['UPLOAD_FOLDER'], picture_fn)
+    form_picture.save(picture_path)
+    return picture_fn
+
+@app.route('/')
 def home():
-    posts = Post.query.all()
+    page = request.args.get('page', 1, type=int)
+    per_page = 5
+    posts = Post.query.paginate(page=page, per_page=per_page)
     return render_template('home.html', posts=posts)
+
+
+
+@app.route("/account", methods=['GET', 'POST'])
+@login_required
+def account():
+    form = UpdateAccountForm()
+    if form.validate_on_submit():
+        if form.picture.data:
+            picture_file = save_picture(form.picture.data)
+            current_user.image = picture_file
+        current_user.username = form.username.data
+        db.session.commit()
+        flash('Your account has been updated!', 'success')
+        return redirect(url_for('account'))
+    elif request.method == 'GET':
+        form.username.data = current_user.username
+    image_file = url_for('static', filename='profile_pics/' + current_user.image)
+    return render_template('account.html', title=current_user.username, image_file=image_file, form=form)
 
 @app.route("/create_post", methods=['GET', 'POST'])
 @login_required
@@ -108,12 +123,13 @@ def register():
     form = RegistrationForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username=form.username.data, password=hashed_password)
+        user = User(username=form.username.data, password=hashed_password, image='default.jpeg')
         db.session.add(user)
         db.session.commit()
         flash(f'Your account has been created! You are now able to log in.', 'success')
         return redirect(url_for('login'))
     return render_template('register.html', title='Register', form=form)
+
 
 @app.route("/login", methods=['GET', 'POST'])
 def login():
@@ -126,7 +142,6 @@ def login():
         else:
             flash('Login Unsuccessful. Please check username and password', 'danger')
     return render_template('login.html', title='Login', form=form)
-
 
 @app.route("/logout")
 @login_required
