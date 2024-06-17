@@ -47,13 +47,17 @@ def save_picture(form_picture):
     form_picture.save(picture_path)
     return picture_fn
 
+# Create tables if they don't exist
+@app.before_request
+def create_tables():
+    db.create_all()
+
 @app.route('/')
 def home():
     page = request.args.get('page', 1, type=int)
     per_page = 5
     posts = Post.query.paginate(page=page, per_page=per_page)
     return render_template('home.html', posts=posts)
-
 
 
 @app.route("/account", methods=['GET', 'POST'])
