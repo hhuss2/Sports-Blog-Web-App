@@ -13,7 +13,7 @@
 - Bootstrap
 
 ## Usage
-- Install the dependencies in requirements.txt and run 'app.py'. Use the link provided to access the web application.
+- Install the dependencies in requirements.txt and run app.py. Use the link provided to access the web application.
 
 ## Demo
 Register:
